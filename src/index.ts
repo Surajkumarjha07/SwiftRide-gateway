@@ -1,7 +1,9 @@
 import express, { Request, Response } from "express";
 import proxy from "express-http-proxy";
+import dotenv from "dotenv";
 
 const app = express();
+dotenv.config();
 
 app.get("/", (req: Request, res: Response) => {
     res.send("Hello! Suraj, I am gateway-service");
@@ -12,6 +14,6 @@ app.use("/captain", proxy("http://localhost:4002"));
 app.use("/rides", proxy("http://localhost:4003"));
 app.use("/fare", proxy("http://localhost:4004"));
 
-app.listen(4000, "0.0.0.0", () => {
+app.listen(Number(process.env.PORT), "0.0.0.0", () => {
     console.log("Gateway is running");
 })
