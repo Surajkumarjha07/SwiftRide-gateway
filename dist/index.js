@@ -1,17 +1,21 @@
 // src/index.ts
 import express from "express";
-import proxy from "express-http-proxy";
 import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "http";
-import { Server } from "socket.io";
 
 // src/middleware/socketAuth.ts
 import jwt from "jsonwebtoken";
+import cookie from "cookie";
 async function handleSocketAuth(socket, next) {
-  const token = socket.handshake.auth?.token;
+  let token;
   const role = socket.handshake.auth?.role;
+  if (socket.handshake.auth?.token) {
+    token = socket.handshake.auth.token;
+  } else if (socket.handshake.headers.cookie) {
+    token = cookie.parse(socket.handshake.headers.cookie).authToken;
+  }
   if (!token || !role) {
     return next(new Error("Token or role is not available!"));
   }
@@ -27,7 +31,154 @@ async function handleSocketAuth(socket, next) {
 }
 var socketAuth_default = handleSocketAuth;
 
+// src/kafka/kafkaClient.ts
+import { Kafka, logLevel } from "kafkajs";
+var kafka = new Kafka({
+  clientId: "gateway",
+  brokers: ["localhost:9092"],
+  connectionTimeout: 1e4,
+  requestTimeout: 3e4,
+  retry: {
+    initialRetryTime: 2e3,
+    retries: 10
+  },
+  logLevel: logLevel.ERROR
+});
+var kafkaClient_default = kafka;
+
+// src/kafka/consumerInIt.ts
+var show_fare_consumer = kafkaClient_default.consumer({ groupId: "show-fare-group" });
+var captains_fetched_consumer = kafkaClient_default.consumer({ groupId: "captains-fetched-group" });
+var captain_not_available = kafkaClient_default.consumer({ groupId: "captain-not-available" });
+async function consumerInit() {
+  await Promise.all([
+    show_fare_consumer.connect(),
+    captains_fetched_consumer.connect(),
+    captain_not_available.connect()
+  ]);
+}
+
+// src/config/socket.ts
+import { Server } from "socket.io";
+var io;
+function InitializeSocket(httpServer2, corsOptions2) {
+  io = new Server(httpServer2, {
+    cors: corsOptions2
+  });
+  return io;
+}
+function getIO() {
+  if (!io) throw new Error(`Socket not initialized!`);
+  return io;
+}
+
+// src/kafka/handlers/captainsFetchedHandler.ts
+async function captainsFetchedHandler({ message }) {
+  try {
+    const { captains, rideData } = JSON.parse(message.value.toString());
+    console.log("captains: ", captains);
+    const io3 = getIO();
+    for (const captain of captains) {
+      let { captainId } = captain;
+      io3.to(captainId).emit("accept-ride", { captain, rideData });
+    }
+  } catch (error) {
+    throw new Error("Error in captains-fetched handler: " + error.message);
+  }
+}
+var captainsFetchedHandler_default = captainsFetchedHandler;
+
+// src/kafka/consumers/captainsFetchedConsumer.ts
+async function captainsFetched() {
+  try {
+    await captains_fetched_consumer.subscribe({ topic: "captains-fetched", fromBeginning: true });
+    await captains_fetched_consumer.run({
+      eachMessage: captainsFetchedHandler_default
+    });
+  } catch (error) {
+    throw new Error("Error in captains-fetched consumer: " + error.message);
+  }
+}
+var captainsFetchedConsumer_default = captainsFetched;
+
+// src/kafka/handlers/showFareHandler.ts
+async function showFareHandler({ message }) {
+  try {
+    const { fare, userId } = JSON.parse(message.value.toString());
+    console.log("fare: ", fare);
+    const io3 = getIO();
+    io3.to(userId).emit("fare-fetched", { userId, fare });
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error("Error in getting show-fare handler: " + error.message);
+    }
+  }
+}
+var showFareHandler_default = showFareHandler;
+
+// src/kafka/consumers/showFareConsumer.ts
+async function showFare() {
+  try {
+    await show_fare_consumer.subscribe({ topic: "show-fare", fromBeginning: true });
+    await show_fare_consumer.run({
+      eachMessage: showFareHandler_default
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error("Error in getting show-fare request: " + error.message);
+    }
+  }
+}
+var showFareConsumer_default = showFare;
+
+// src/kafka/kafkaAdmin.ts
+async function kafkaInit() {
+  const admin = kafkaClient_default.admin();
+  console.log("Admin connecting...");
+  await admin.connect();
+  console.log("Admin connected...");
+  const topics = ["show-fare"];
+  const existingTopics = await admin.listTopics();
+  const topicsToCreate = topics.filter((t) => !existingTopics.includes(t));
+  if (topicsToCreate.length > 0) {
+    await admin.createTopics({
+      topics: topicsToCreate.map((t) => ({ topic: t, numPartitions: 1 }))
+    });
+  }
+  console.log("Topics created!");
+  await admin.disconnect();
+}
+var kafkaAdmin_default = kafkaInit;
+
+// src/kafka/producerInIt.ts
+import { Partitioners } from "kafkajs";
+var producer = kafkaClient_default.producer({
+  createPartitioner: Partitioners.LegacyPartitioner
+});
+async function producerInit() {
+  await producer.connect();
+}
+
+// src/kafka/index.ts
+var startKafka = async () => {
+  try {
+    await kafkaAdmin_default();
+    console.log("Consumer initialization...");
+    await consumerInit();
+    console.log("Consumer initialized...");
+    console.log("Producer initialization...");
+    await producerInit();
+    console.log("Producer initializated");
+    await showFareConsumer_default();
+    await captainsFetchedConsumer_default();
+  } catch (error) {
+    console.log("error in initializing kafka: ", error);
+  }
+};
+var kafka_default = startKafka;
+
 // src/index.ts
+import proxy from "express-http-proxy";
 dotenv.config();
 var corsOptions = {
   origin: "http://localhost:3000",
@@ -35,22 +186,32 @@ var corsOptions = {
 };
 var app = express();
 var httpServer = createServer(app);
-var io = new Server(httpServer, {
-  cors: corsOptions
-});
+var io2 = InitializeSocket(httpServer, corsOptions);
 app.use(cookieParser());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cors(corsOptions));
 app.get("/", (req, res) => {
   res.send("Hello! Suraj, I am gateway-service");
 });
+kafka_default();
 app.use("/user", proxy("http://localhost:4001"));
 app.use("/captain", proxy("http://localhost:4002"));
 app.use("/rides", proxy("http://localhost:4003"));
 app.use("/fare", proxy("http://localhost:4004"));
 app.use("/payment", proxy("http://localhost:4005"));
-io.use(socketAuth_default);
-io.on("connection", (socket) => {
-  console.log("socket io connected with: ", socket.id);
+io2.use(socketAuth_default);
+io2.on("connection", (socket) => {
+  const payload = socket.data.user;
+  const { userId, captainId } = payload;
+  if (userId) {
+    socket.join(userId);
+    console.log(`User ${userId} joined room`);
+  }
+  if (captainId) {
+    socket.join(captainId);
+    console.log(`Captain ${captainId} joined room`);
+  }
   socket.on("disconnect", () => {
     console.log("socket disconnected: ", socket.id);
   });
