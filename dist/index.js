@@ -50,11 +50,17 @@ var kafkaClient_default = kafka;
 var show_fare_consumer = kafkaClient_default.consumer({ groupId: "show-fare-group" });
 var captains_fetched_consumer = kafkaClient_default.consumer({ groupId: "captains-fetched-group" });
 var captain_not_available = kafkaClient_default.consumer({ groupId: "captain-not-available" });
+var ride_confirmed_notify_user = kafkaClient_default.consumer({ groupId: "ride-confirmed-notify-user-group" });
+var ride_cancelled_notify_captain = kafkaClient_default.consumer({ groupId: "ride-cancelled-notify-captain-group" });
+var payment_request_notify_user = kafkaClient_default.consumer({ groupId: "payment-request-notify-user-group" });
 async function consumerInit() {
   await Promise.all([
     show_fare_consumer.connect(),
     captains_fetched_consumer.connect(),
-    captain_not_available.connect()
+    captain_not_available.connect(),
+    ride_confirmed_notify_user.connect(),
+    ride_cancelled_notify_captain.connect(),
+    payment_request_notify_user.connect()
   ]);
 }
 
@@ -71,6 +77,32 @@ function getIO() {
   if (!io) throw new Error(`Socket not initialized!`);
   return io;
 }
+
+// src/kafka/handlers/captainNotAvailableHandler.ts
+async function captainNotAvailableHandler({ message }) {
+  try {
+    const { rideData } = JSON.parse(message.value.toString());
+    const { userId } = rideData;
+    const io3 = getIO();
+    io3.to(userId).emit("no-captain-found", { rideData });
+  } catch (error) {
+    throw new Error("Error in getting captain-not-available handler: " + error.message);
+  }
+}
+var captainNotAvailableHandler_default = captainNotAvailableHandler;
+
+// src/kafka/consumers/captainNotAvailabeConsumer.ts
+async function captainNotAvailable() {
+  try {
+    await captain_not_available.subscribe({ topic: "no-captain-found-notify-gateway", fromBeginning: true });
+    await captain_not_available.run({
+      eachMessage: captainNotAvailableHandler_default
+    });
+  } catch (error) {
+    throw new Error("Error in getting captain-not-available request: " + error.message);
+  }
+}
+var captainNotAvailabeConsumer_default = captainNotAvailable;
 
 // src/kafka/handlers/captainsFetchedHandler.ts
 async function captainsFetchedHandler({ message }) {
@@ -100,6 +132,84 @@ async function captainsFetched() {
   }
 }
 var captainsFetchedConsumer_default = captainsFetched;
+
+// src/kafka/handlers/paymentRequestHandler.ts
+async function paymentRequestHandler({ message }) {
+  try {
+    const { rideData } = JSON.parse(message.value.toString());
+    const { userId } = rideData;
+    const io3 = getIO();
+    io3.to(userId).emit("payment-request", { rideData });
+  } catch (error) {
+    throw new Error("Error in payment-request handler(gateway): " + error.message);
+  }
+}
+var paymentRequestHandler_default = paymentRequestHandler;
+
+// src/kafka/consumers/paymentRequested.ts
+async function paymentRequest() {
+  try {
+    await payment_request_notify_user.subscribe({ topic: "payment-requested-notify-user", fromBeginning: true });
+    await payment_request_notify_user.run({
+      eachMessage: paymentRequestHandler_default
+    });
+  } catch (error) {
+    throw new Error("Error in payment-request consumer(gateway): " + error.message);
+  }
+}
+var paymentRequested_default = paymentRequest;
+
+// src/kafka/handlers/rideCancelledHandler.ts
+async function rideCancelledHandler({ message }) {
+  try {
+    const { rideData } = JSON.parse(message.value.toString());
+    const { captainId } = rideData;
+    const io3 = getIO();
+    io3.to(captainId).emit("ride-cancelled", { rideData });
+  } catch (error) {
+    throw new Error("Error in getting ride-cancelled handler(gateway): " + error.message);
+  }
+}
+var rideCancelledHandler_default = rideCancelledHandler;
+
+// src/kafka/consumers/rideCancelledConsumer.ts
+async function rideCancelled() {
+  try {
+    await ride_cancelled_notify_captain.subscribe({ topic: "ride-cancelled-notify-captain", fromBeginning: true });
+    await ride_cancelled_notify_captain.run({
+      eachMessage: rideCancelledHandler_default
+    });
+  } catch (error) {
+    throw new Error("Error in ride cancelled consumer(gateway): " + error.message);
+  }
+}
+var rideCancelledConsumer_default = rideCancelled;
+
+// src/kafka/handlers/rideConfirmedNotifyHandler.ts
+async function rideConfirmedNotifyHandler({ message }) {
+  try {
+    const { rideData } = JSON.parse(message.value.toString());
+    const { userId } = rideData;
+    const io3 = getIO();
+    io3.to(userId).emit("ride-confirmed", { rideData });
+  } catch (error) {
+    throw new Error("Error in ride-confirmed-notify-consumer: " + error.message);
+  }
+}
+var rideConfirmedNotifyHandler_default = rideConfirmedNotifyHandler;
+
+// src/kafka/consumers/rideConfirmedNotifyConsumer.ts
+async function rideConfirmedNotifyUser() {
+  try {
+    await ride_confirmed_notify_user.subscribe({ topic: "ride-confirmed-notify-user", fromBeginning: true });
+    await ride_confirmed_notify_user.run({
+      eachMessage: rideConfirmedNotifyHandler_default
+    });
+  } catch (error) {
+    throw new Error("Error in ride-confirmed-notify-consumer: " + error.message);
+  }
+}
+var rideConfirmedNotifyConsumer_default = rideConfirmedNotifyUser;
 
 // src/kafka/handlers/showFareHandler.ts
 async function showFareHandler({ message }) {
@@ -171,6 +281,10 @@ var startKafka = async () => {
     console.log("Producer initializated");
     await showFareConsumer_default();
     await captainsFetchedConsumer_default();
+    await captainNotAvailabeConsumer_default();
+    await rideConfirmedNotifyConsumer_default();
+    await rideCancelledConsumer_default();
+    await paymentRequested_default();
   } catch (error) {
     console.log("error in initializing kafka: ", error);
   }
