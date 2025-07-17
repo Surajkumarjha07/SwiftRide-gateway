@@ -8,6 +8,8 @@ import startKafka from "./kafka/index.js";
 import { InitializeSocket } from "./config/socket.js";
 import proxy from "express-http-proxy";
 import { CaptainPayload, UserPayload } from "./types/payload.js";
+import rateLimitMiddleware from "./middleware/rateLimiter.js";
+import locationUpdateRoutes from "./routes/locationUpdates.js";
 
 // dotenv config
 dotenv.config();
@@ -34,15 +36,18 @@ app.get("/", (req: Request, res: Response) => {
     res.send("Hello! Suraj, I am gateway-service");
 });
 
+// API Routes
+app.use("/location-update", locationUpdateRoutes);
+
 // kafka setup
 startKafka();
 
 // proxy servers
-app.use("/user", proxy("http://localhost:4001"));
-app.use("/captain", proxy("http://localhost:4002"));
-app.use("/rides", proxy("http://localhost:4003"));
-app.use("/fare", proxy("http://localhost:4004"));
-app.use("/payment", proxy("http://localhost:4005"));
+app.use("/user", rateLimitMiddleware, proxy("http://localhost:4001"));
+app.use("/captain", rateLimitMiddleware, proxy("http://localhost:4002"));
+app.use("/rides", rateLimitMiddleware, proxy("http://localhost:4003"));
+app.use("/fare", rateLimitMiddleware, proxy("http://localhost:4004"));
+app.use("/payment", rateLimitMiddleware, proxy("http://localhost:4005"));
 
 // socket authentication
 io.use(handleSocketAuth);
@@ -50,7 +55,7 @@ io.use(handleSocketAuth);
 // socket io initialization
 io.on("connection", (socket) => {
     const payload: UserPayload & CaptainPayload = socket.data.user;
-    
+
     const { userId, captainId } = payload;
 
     if (userId) {

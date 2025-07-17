@@ -1,6 +1,6 @@
 // src/index.ts
 import express from "express";
-import dotenv from "dotenv";
+import dotenv3 from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "http";
@@ -293,7 +293,179 @@ var kafka_default = startKafka;
 
 // src/index.ts
 import proxy from "express-http-proxy";
+
+// src/services/rateLimit.ts
+var RateLimit = class {
+  capacity;
+  refill_time;
+  tokens;
+  constructor(capacity, refill_time) {
+    this.capacity = capacity;
+    this.refill_time = refill_time;
+    this.tokens = capacity;
+    this.refillToken();
+  }
+  removeToken = () => {
+    if (this.tokens > 0) {
+      this.tokens--;
+      return true;
+    } else {
+      return false;
+    }
+  };
+  refillToken = () => {
+    setInterval(() => {
+      if (this.tokens < this.capacity) {
+        this.tokens++;
+      }
+    }, this.refill_time);
+  };
+};
+var rateLimit_default = RateLimit;
+
+// src/middleware/rateLimiter.ts
+var rateLimitMap = /* @__PURE__ */ new Map();
+async function rateLimitMiddleware(req, res, next) {
+  try {
+    const ip = req.ip;
+    if (!rateLimitMap.has(ip)) {
+      rateLimitMap.set(ip, new rateLimit_default(5, 2e3));
+      setTimeout(() => {
+        rateLimitMap.delete(ip);
+      }, 10 * (60 * 1e3));
+    }
+    const rateLimit = rateLimitMap.get(ip);
+    const allowed = rateLimit?.removeToken();
+    if (!allowed) {
+      return res.status(429).json({
+        error: "Too many requests!"
+      });
+    }
+    return next();
+  } catch (error) {
+    throw new Error("Error in rate limit middleware: " + error.message);
+  }
+}
+var rateLimiter_default = rateLimitMiddleware;
+
+// src/routes/locationUpdates.ts
+import { Router } from "express";
+
+// src/middleware/captainAuth.ts
+import jwt2 from "jsonwebtoken";
+import dotenv from "dotenv";
 dotenv.config();
+async function captainAuthenticate(req, res, next) {
+  let token = req.cookies.authToken || req.headers["authorization"]?.split("Bearer ")[1];
+  if (!token) {
+    res.status(404).json({ message: "token not available" });
+    return;
+  }
+  try {
+    const verified = jwt2.verify(token, process.env.CAPTAIN_JWT_SECRET);
+    if (verified) {
+      req.captain = verified;
+      next();
+    }
+  } catch (error) {
+    return res.status(403).json({ message: "Forbidden: Invalid or expired token" });
+  }
+}
+var captainAuth_default = captainAuthenticate;
+
+// src/kafka/producers/producerTemplate.ts
+async function sendProducerMessage(topic, data) {
+  try {
+    await producer.send({
+      topic,
+      messages: [{ value: JSON.stringify(data) }]
+    });
+    console.log(`${topic} sent`);
+  } catch (error) {
+    console.log(`error in sending ${topic}: ${error}`);
+  }
+}
+var producerTemplate_default = sendProducerMessage;
+
+// src/controller/captainLocationUpdate.ts
+async function captainLocationUpdate(req, res) {
+  try {
+    const { coordinates } = req.body;
+    const { captainId } = req.captain;
+    if (coordinates && captainId) {
+      await producerTemplate_default("captain-location-update", { coordinates, captainId });
+      return res.status(200).json({
+        message: "location update sent"
+      });
+    }
+    ;
+    return res.status(400).json({
+      message: "coordinates or captainId not available"
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: error.message || "Internal server error!"
+      });
+    }
+  }
+}
+var captainLocationUpdate_default = captainLocationUpdate;
+
+// src/middleware/userAuth.ts
+import jwt3 from "jsonwebtoken";
+import dotenv2 from "dotenv";
+dotenv2.config();
+async function userAuthenticate(req, res, next) {
+  let token = req.cookies.authToken || req.headers["authorization"]?.split("Bearer ")[1];
+  if (!token) {
+    return res.status(404).json({ message: "token not available" });
+  }
+  try {
+    const verified = jwt3.verify(token, process.env.USER_JWT_SECRET);
+    if (verified) {
+      req.user = verified;
+      next();
+    }
+  } catch (error) {
+    return res.status(403).json({ message: "Forbidden: Invalid or expired token" });
+  }
+}
+var userAuth_default = userAuthenticate;
+
+// src/controller/userLocationUpdate.ts
+async function userLocationUpdate(req, res) {
+  try {
+    const { coordinates } = req.body;
+    const { userId } = req.user;
+    if (coordinates && userId) {
+      await producerTemplate_default("user-location-update", { coordinates, userId });
+      return res.status(200).json({
+        message: "location update sent"
+      });
+    }
+    ;
+    return res.status(400).json({
+      message: "coordinates or userId not available"
+    });
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: error.message || "Internal server error!"
+      });
+    }
+  }
+}
+var userLocationUpdate_default = userLocationUpdate;
+
+// src/routes/locationUpdates.ts
+var router = Router();
+router.post("/captain", captainAuth_default, captainLocationUpdate_default);
+router.post("/user", userAuth_default, userLocationUpdate_default);
+var locationUpdates_default = router;
+
+// src/index.ts
+dotenv3.config();
 var corsOptions = {
   origin: "http://localhost:3000",
   credentials: true
@@ -308,12 +480,13 @@ app.use(cors(corsOptions));
 app.get("/", (req, res) => {
   res.send("Hello! Suraj, I am gateway-service");
 });
+app.use("/location-update", locationUpdates_default);
 kafka_default();
-app.use("/user", proxy("http://localhost:4001"));
-app.use("/captain", proxy("http://localhost:4002"));
-app.use("/rides", proxy("http://localhost:4003"));
-app.use("/fare", proxy("http://localhost:4004"));
-app.use("/payment", proxy("http://localhost:4005"));
+app.use("/user", rateLimiter_default, proxy("http://localhost:4001"));
+app.use("/captain", rateLimiter_default, proxy("http://localhost:4002"));
+app.use("/rides", rateLimiter_default, proxy("http://localhost:4003"));
+app.use("/fare", rateLimiter_default, proxy("http://localhost:4004"));
+app.use("/payment", rateLimiter_default, proxy("http://localhost:4005"));
 io2.use(socketAuth_default);
 io2.on("connection", (socket) => {
   const payload = socket.data.user;
