@@ -1,9 +1,17 @@
 import { ExtendedError, Socket } from "socket.io";
 import jwt from "jsonwebtoken";
+import cookie from "cookie";
 
 async function handleSocketAuth(socket: Socket, next: (error?: ExtendedError) => void) {
-    const token: string = socket.handshake.auth?.token;
+    let token: string | undefined;
     const role: string = socket.handshake.auth?.role;
+
+    if (socket.handshake.auth?.token) {
+        token = socket.handshake.auth.token;
+    }
+    else if (socket.handshake.headers.cookie) {
+        token = cookie.parse(socket.handshake.headers.cookie!).authToken;
+    }
 
     if (!token || !role) {
         return next(new Error("Token or role is not available!"));
