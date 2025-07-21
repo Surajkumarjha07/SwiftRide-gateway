@@ -10,6 +10,7 @@ import proxy from "express-http-proxy";
 import { CaptainPayload, UserPayload } from "./types/payload.js";
 import rateLimitMiddleware from "./middleware/rateLimiter.js";
 import locationUpdateRoutes from "./routes/locationUpdates.js";
+import userAuthenticate from "./middleware/userAuth.js";
 
 // dotenv config
 dotenv.config();
@@ -47,7 +48,19 @@ app.use("/user", rateLimitMiddleware, proxy("http://localhost:4001"));
 app.use("/captain", rateLimitMiddleware, proxy("http://localhost:4002"));
 app.use("/rides", rateLimitMiddleware, proxy("http://localhost:4003"));
 app.use("/fare", rateLimitMiddleware, proxy("http://localhost:4004"));
-app.use("/payment", rateLimitMiddleware, proxy("http://localhost:4005"));
+app.use("/payment", userAuthenticate, rateLimitMiddleware, proxy("http://localhost:4005", {
+    proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
+
+        if (srcReq.user) {
+            proxyReqOpts.headers = {
+                ...proxyReqOpts.headers,
+                "x-user-payload": JSON.stringify(srcReq.user)
+            }
+        }
+
+        return proxyReqOpts;
+    }
+}));
 
 // socket authentication
 io.use(handleSocketAuth);
@@ -67,6 +80,12 @@ io.on("connection", (socket) => {
         socket.join(captainId);
         console.log(`Captain ${captainId} joined room`);
     }
+
+    socket.on("message", ({ userName, message, fromId, toId }) => {
+        console.log('message: ', userName, message);
+        io.to(toId).emit("messageArrived", { userName, message });
+        io.to(fromId).emit("messageArrived", { userName, message });
+    })
 
     socket.on("disconnect", () => {
         console.log("socket disconnected: ", socket.id);

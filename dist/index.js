@@ -53,6 +53,7 @@ var captain_not_available = kafkaClient_default.consumer({ groupId: "captain-not
 var ride_confirmed_notify_user = kafkaClient_default.consumer({ groupId: "ride-confirmed-notify-user-group" });
 var ride_cancelled_notify_captain = kafkaClient_default.consumer({ groupId: "ride-cancelled-notify-captain-group" });
 var payment_request_notify_user = kafkaClient_default.consumer({ groupId: "payment-request-notify-user-group" });
+var payment_processed_notify_captain = kafkaClient_default.consumer({ groupId: "payment-processed-notify-captain" });
 async function consumerInit() {
   await Promise.all([
     show_fare_consumer.connect(),
@@ -60,7 +61,8 @@ async function consumerInit() {
     captain_not_available.connect(),
     ride_confirmed_notify_user.connect(),
     ride_cancelled_notify_captain.connect(),
-    payment_request_notify_user.connect()
+    payment_request_notify_user.connect(),
+    payment_processed_notify_captain.connect()
   ]);
 }
 
@@ -132,6 +134,31 @@ async function captainsFetched() {
   }
 }
 var captainsFetchedConsumer_default = captainsFetched;
+
+// src/kafka/handlers/paymentProcessedNotifyCaptainHandler.ts
+async function paymentProcessedNotifyCaptainHandler({ message }) {
+  try {
+    const { fare, payment_id, orderId, order, userId, rideId, captainId } = JSON.parse(message.value.toString());
+    const io3 = getIO();
+    io3.to(captainId).emit("payment-processed", { fare, payment_id, orderId, order, userId, rideId, captainId });
+  } catch (error) {
+    throw new Error("Error in payment-processed-notify-captain handler: " + error.message);
+  }
+}
+var paymentProcessedNotifyCaptainHandler_default = paymentProcessedNotifyCaptainHandler;
+
+// src/kafka/consumers/paymentProccessedNotifyCaptain.ts
+async function paymentProcessedNotifyCaptain() {
+  try {
+    await payment_processed_notify_captain.subscribe({ topic: "payment-processed-notify-captain", fromBeginning: true });
+    await payment_processed_notify_captain.run({
+      eachMessage: paymentProcessedNotifyCaptainHandler_default
+    });
+  } catch (error) {
+    throw new Error("Error in payment-processed-notify-captain: " + error.message);
+  }
+}
+var paymentProccessedNotifyCaptain_default = paymentProcessedNotifyCaptain;
 
 // src/kafka/handlers/paymentRequestHandler.ts
 async function paymentRequestHandler({ message }) {
@@ -285,6 +312,7 @@ var startKafka = async () => {
     await rideConfirmedNotifyConsumer_default();
     await rideCancelledConsumer_default();
     await paymentRequested_default();
+    await paymentProccessedNotifyCaptain_default();
   } catch (error) {
     console.log("error in initializing kafka: ", error);
   }
@@ -486,7 +514,17 @@ app.use("/user", rateLimiter_default, proxy("http://localhost:4001"));
 app.use("/captain", rateLimiter_default, proxy("http://localhost:4002"));
 app.use("/rides", rateLimiter_default, proxy("http://localhost:4003"));
 app.use("/fare", rateLimiter_default, proxy("http://localhost:4004"));
-app.use("/payment", rateLimiter_default, proxy("http://localhost:4005"));
+app.use("/payment", userAuth_default, rateLimiter_default, proxy("http://localhost:4005", {
+  proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
+    if (srcReq.user) {
+      proxyReqOpts.headers = {
+        ...proxyReqOpts.headers,
+        "x-user-payload": JSON.stringify(srcReq.user)
+      };
+    }
+    return proxyReqOpts;
+  }
+}));
 io2.use(socketAuth_default);
 io2.on("connection", (socket) => {
   const payload = socket.data.user;
@@ -499,6 +537,11 @@ io2.on("connection", (socket) => {
     socket.join(captainId);
     console.log(`Captain ${captainId} joined room`);
   }
+  socket.on("message", ({ userName, message, fromId, toId }) => {
+    console.log("message: ", userName, message);
+    io2.to(toId).emit("messageArrived", { userName, message });
+    io2.to(fromId).emit("messageArrived", { userName, message });
+  });
   socket.on("disconnect", () => {
     console.log("socket disconnected: ", socket.id);
   });
