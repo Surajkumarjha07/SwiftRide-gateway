@@ -1,4 +1,3 @@
-
 class RateLimit {
     capacity: number;
     refill_time: number;

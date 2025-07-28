@@ -1,5 +1,5 @@
 import { captains_fetched_consumer } from "../consumerInIt.js";
-import captainsFetchedHandler from "../handlers/captainsFetchedHandler.js";
+import captainsFetchedHandler from "../handlers/captainsFetched.handler.js";
 
 async function captainsFetched() {
     try {

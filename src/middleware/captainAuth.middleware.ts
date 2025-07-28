@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import { NextFunction, Request, Response } from "express";
-import { CaptainPayload } from "../types/payload.js";
+import { CaptainPayload } from "../types/payload.type.js";
 
 dotenv.config();
 

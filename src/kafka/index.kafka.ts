@@ -1,10 +1,11 @@
 import { consumerInit } from "./consumerInIt.js";
-import captainNotAvailable from "./consumers/captainNotAvailabeConsumer.js";
-import captainsFetched from "./consumers/captainsFetchedConsumer.js";
-import paymentRequest from "./consumers/paymentRequested.js";
-import rideCancelled from "./consumers/rideCancelledConsumer.js";
-import rideConfirmedNotifyUser from "./consumers/rideConfirmedNotifyConsumer.js";
-import showFare from "./consumers/showFareConsumer.js";
+import captainNotAvailable from "./consumers/captainNotAvailabe.consumer.js";
+import captainsFetched from "./consumers/captainsFetched.consumer.js";
+import paymentProcessedNotifyCaptain from "./consumers/paymentProccessedNotifyCaptain.consumer.js";
+import paymentRequest from "./consumers/paymentRequested.consumer.js";
+import rideCancelled from "./consumers/rideCancelled.consumer.js";
+import rideConfirmedNotifyUser from "./consumers/rideConfirmedNotify.consumer.js";
+import showFare from "./consumers/showFare.consumer.js";
 import kafkaInit from "./kafkaAdmin.js";
 import { producerInit } from "./producerInIt.js";
 
@@ -27,6 +28,7 @@ const startKafka = async () => {
         await rideConfirmedNotifyUser();
         await rideCancelled();
         await paymentRequest();
+        await paymentProcessedNotifyCaptain();
 
     } catch (error) {
         console.log("error in initializing kafka: ", error);

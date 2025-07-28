@@ -1,5 +1,5 @@
 import { ride_confirmed_notify_user } from "../consumerInIt.js";
-import rideConfirmedNotifyHandler from "../handlers/rideConfirmedNotifyHandler.js";
+import rideConfirmedNotifyHandler from "../handlers/rideConfirmedNotify.handler.js";
 
 async function rideConfirmedNotifyUser() {
     try {

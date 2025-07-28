@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import coords from "../types/coordinates.js";
-import { UserPayload } from "../types/payload.js";
+import coords from "../types/coordinates.type.js";
+import { UserPayload } from "../types/payload.type.js";
 import sendProducerMessage from "../kafka/producers/producerTemplate.js";
 
 async function userLocationUpdate(req: Request, res: Response): Promise<any> {

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import sendProducerMessage from "../kafka/producers/producerTemplate.js";
-import { CaptainPayload } from "../types/payload.js";
-import coords from "../types/coordinates.js";
+import { CaptainPayload } from "../types/payload.type.js";
+import coords from "../types/coordinates.type.js";
 
 async function captainLocationUpdate(req: Request, res: Response): Promise<any> {
     try {

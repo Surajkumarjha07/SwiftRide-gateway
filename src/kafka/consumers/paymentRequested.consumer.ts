@@ -1,5 +1,5 @@
 import { payment_request_notify_user } from "../consumerInIt.js";
-import paymentRequestHandler from "../handlers/paymentRequestHandler.js";
+import paymentRequestHandler from "../handlers/paymentRequest.handler.js";
 
 async function paymentRequest() {
     try {
