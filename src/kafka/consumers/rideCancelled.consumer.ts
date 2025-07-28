@@ -1,5 +1,5 @@
 import { ride_cancelled_notify_captain } from "../consumerInIt.js";
-import rideCancelledHandler from "../handlers/rideCancelledHandler.js";
+import rideCancelledHandler from "../handlers/rideCancelled.handler.js";
 
 async function rideCancelled() {
     try {

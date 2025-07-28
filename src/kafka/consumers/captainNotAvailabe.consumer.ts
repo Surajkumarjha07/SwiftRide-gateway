@@ -1,5 +1,5 @@
 import { captain_not_available } from "../consumerInIt.js";
-import captainNotAvailableHandler from "../handlers/captainNotAvailableHandler.js";
+import captainNotAvailableHandler from "../handlers/captainNotAvailable.handler.js";
 
 async function captainNotAvailable() {
     try {

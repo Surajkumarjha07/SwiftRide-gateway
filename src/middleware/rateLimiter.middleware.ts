@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import RateLimit from "../services/rateLimit.js";
+import RateLimit from "../services/rateLimit.service.js";
 
 const rateLimitMap = new Map<string, RateLimit>();
 

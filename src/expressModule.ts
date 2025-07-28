@@ -1,4 +1,4 @@
-import { CaptainPayload, UserPayload } from "./src/types/payload.js"
+import { CaptainPayload, UserPayload } from "./types/payload.type.js"
 
 declare module 'express-serve-static-core' {
     interface Request {

@@ -1,5 +1,5 @@
 import { show_fare_consumer } from "../consumerInIt.js";
-import showFareHandler from "../handlers/showFareHandler.js";
+import showFareHandler from "../handlers/showFare.handler.js";
 
 
 async function showFare() {
