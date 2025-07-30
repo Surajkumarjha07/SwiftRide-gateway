@@ -364,7 +364,7 @@ async function rateLimitMiddleware(req, res, next) {
   try {
     const ip = req.ip;
     if (!rateLimitMap.has(ip)) {
-      rateLimitMap.set(ip, new rateLimit_service_default(5, 2e3));
+      rateLimitMap.set(ip, new rateLimit_service_default(10, 2e3));
       setTimeout(() => {
         rateLimitMap.delete(ip);
       }, 10 * (60 * 1e3));
@@ -544,10 +544,17 @@ io2.on("connection", (socket) => {
     socket.join(captainId);
     console.log(`Captain ${captainId} joined room`);
   }
-  socket.on("message", ({ userName, message, fromId, toId }) => {
-    console.log("message: ", userName, message);
-    io2.to(toId).emit("messageArrived", { userName, message });
-    io2.to(fromId).emit("messageArrived", { userName, message });
+  socket.on("initiate-chat", ({ rideData }, callback) => {
+    const { rideId } = rideData;
+    socket.join(`room-${rideId}`);
+    if (callback) callback({
+      status: "joined",
+      roomId: rideId
+    });
+  });
+  socket.on("message", ({ userName, rideId, message }) => {
+    const room = `room-${rideId}`;
+    io2.to(room).emit("messageArrived", { userName, message });
   });
   socket.on("disconnect", () => {
     console.log("socket disconnected: ", socket.id);

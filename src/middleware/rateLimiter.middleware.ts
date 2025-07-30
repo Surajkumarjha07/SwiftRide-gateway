@@ -8,7 +8,7 @@ async function rateLimitMiddleware(req: Request, res: Response, next: NextFuncti
         const ip = req.ip;
 
         if (!rateLimitMap.has(ip!)) {
-            rateLimitMap.set(ip!, new RateLimit(5, 2000));
+            rateLimitMap.set(ip!, new RateLimit(10, 2000));
 
             setTimeout(() => {
                 rateLimitMap.delete(ip!);
