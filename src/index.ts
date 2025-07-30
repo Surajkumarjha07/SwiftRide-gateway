@@ -81,15 +81,26 @@ io.on("connection", (socket) => {
         console.log(`Captain ${captainId} joined room`);
     }
 
-    socket.on("message", ({ userName, message, fromId, toId }) => {
-        console.log('message: ', userName, message);
-        io.to(toId).emit("messageArrived", { userName, message });
-        io.to(fromId).emit("messageArrived", { userName, message });
-    })
+    socket.on("initiate-chat", ({ rideData }, callback) => {
+        const { rideId } = rideData;
+
+        socket.join(`room-${rideId}`);
+
+        if (callback) callback({
+            status: "joined",
+            roomId: rideId
+        });
+    });
+
+    socket.on("message", ({ userName, rideId, message }) => {
+        const room = `room-${rideId}`;
+
+        io.to(room).emit("messageArrived", { userName, message });
+    });
 
     socket.on("disconnect", () => {
         console.log("socket disconnected: ", socket.id);
-    })
+    });
 })
 
 // listening to port
