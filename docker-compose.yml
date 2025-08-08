@@ -1,0 +1,16 @@
+services:
+  gateway:
+    build: .
+    image: gateway-image
+    container_name: gateway
+    restart: always
+    ports:
+      - "5000:4000"
+    env_file:
+      - .env
+    networks:
+      - users-kafka-net
+
+networks:
+  users-kafka-net:
+    external: true
