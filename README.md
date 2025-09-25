@@ -9,6 +9,7 @@ The Gateway Service acts as a proxy server for SwiftRide (Ride-Sharing platform)
 ✅ Acts as a proxy for client requests  
 ✅ Direct request to appropriate internal microservices  
 ✅ Integrated with Socket.IO for real-time updates to the client  
+✅ Integrated with Rate-Limiter (Token Bucket Algorithm) to prevent the server from being exploited by a single user or captain  
 
 -----------------------------------------------------------------------------------------------------------------------------------------------
 
