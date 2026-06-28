@@ -35,7 +35,7 @@ var socketAuth_middleware_default = handleSocketAuth;
 import { Kafka, logLevel } from "kafkajs";
 var kafka = new Kafka({
   clientId: "gateway",
-  brokers: ["localhost:9092"],
+  brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
   connectionTimeout: 1e4,
   requestTimeout: 3e4,
   retry: {
@@ -137,7 +137,20 @@ var captainsFetched_consumer_default = captainsFetched;
 
 // src/config/redis.ts
 import { Redis } from "ioredis";
-var redis = new Redis();
+var REDIS_HOST = process.env.REDIS_HOST || "localhost";
+var REDIS_PORT = Number(process.env.REDIS_PORT) || 6379;
+var redis = new Redis({
+  host: REDIS_HOST,
+  port: REDIS_PORT
+});
+redis.on("connect", () => {
+  console.log(
+    `Redis connected: ${REDIS_HOST}:${REDIS_PORT}`
+  );
+});
+redis.on("error", (err) => {
+  console.error("Redis Error:", err);
+});
 var redis_default = redis;
 
 // src/kafka/handlers/paymentProcessedNotifyCaptain.handler.ts
@@ -251,8 +264,13 @@ async function showFareHandler({ message }) {
     const { fareDetails, userId } = JSON.parse(message.value.toString());
     console.log("fareDetails: ", fareDetails);
     const io3 = getIO();
+    console.log("io instance exists:", !!io3);
+    console.log("Connected socket IDs:", Array.from(io3.sockets.sockets.keys()));
+    console.log("Rooms:", Array.from(io3.sockets.adapter.rooms.keys()));
+    console.log("Emitting to userId:", userId, typeof userId);
     io3.to(userId).emit("fare-fetched", { userId, fareDetails });
   } catch (error) {
+    console.error("showFareHandler error:", error);
     if (error instanceof Error) {
       throw new Error("Error in getting show-fare handler: " + error.message);
     }
@@ -517,12 +535,18 @@ app.get("/", (req, res) => {
 });
 app.use("/location-update", locationUpdates_route_default);
 index_kafka_default();
-app.use("/user", rateLimiter_middleware_default, proxy("http://localhost:4001"));
-app.use("/captain", rateLimiter_middleware_default, proxy("http://localhost:4002"));
-app.use("/rides", rateLimiter_middleware_default, proxy("http://localhost:4003"));
-app.use("/fare", rateLimiter_middleware_default, proxy("http://localhost:4004"));
-app.use("/payment", userAuth_middleware_default, rateLimiter_middleware_default, proxy("http://localhost:4005", {
+var USER_SERVICE_HOST = process.env.USER_SERVICE_HOST || "localhost";
+var CAPTAIN_SERVICE_HOST = process.env.CAPTAIN_SERVICE_HOST || "localhost";
+var RIDE_SERVICE_HOST = process.env.RIDE_SERVICE_HOST || "localhost";
+var FARE_SERVICE_HOST = process.env.FARE_SERVICE_HOST || "localhost";
+var PAYMENT_SERVICE_HOST = process.env.PAYMENT_SERVICE_HOST || "localhost";
+app.use("/user", rateLimiter_middleware_default, proxy(`http://${USER_SERVICE_HOST}:4001`));
+app.use("/captain", rateLimiter_middleware_default, proxy(`http://${CAPTAIN_SERVICE_HOST}:4002`));
+app.use("/rides", rateLimiter_middleware_default, proxy(`http://${RIDE_SERVICE_HOST}:4003`));
+app.use("/fare", rateLimiter_middleware_default, proxy(`http://${FARE_SERVICE_HOST}:4004`));
+app.use("/payment", userAuth_middleware_default, rateLimiter_middleware_default, proxy(`http://${PAYMENT_SERVICE_HOST}:4005`, {
   proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
+    console.log("SRC REQ::::::::::: ", srcReq.user);
     if (srcReq.user) {
       proxyReqOpts.headers = {
         ...proxyReqOpts.headers,

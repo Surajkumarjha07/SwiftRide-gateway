@@ -8,13 +8,15 @@ WORKDIR /app
 COPY package*.json ./
 
 # installing dependencies
-RUN npm install --omit=dev && npm cache clean --force
+RUN npm install && npm cache clean --force
 
 # copying all files
 COPY . .
 
 # exposing port to 4000
 EXPOSE 4000
+
+RUN npm run build
 
 # cmd command
 CMD [ "npm", "start" ]
