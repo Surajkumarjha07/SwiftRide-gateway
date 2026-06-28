@@ -41,7 +41,7 @@ app.get("/", (req: Request, res: Response) => {
 app.use("/location-update", locationUpdateRoutes);
 
 // kafka setup
-startKafka();
+await startKafka();
 
 const USER_SERVICE_HOST = process.env.USER_SERVICE_HOST || "localhost";
 const CAPTAIN_SERVICE_HOST = process.env.CAPTAIN_SERVICE_HOST || "localhost";
