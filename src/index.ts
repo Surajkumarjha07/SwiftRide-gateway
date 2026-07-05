@@ -112,6 +112,6 @@ io.on("connection", (socket) => {
 })
 
 // listening to port
-httpServer.listen(Number(process.env.PORT), "0.0.0.0", () => {
+httpServer.listen(Number(process.env.GATEWAY_PORT), "0.0.0.0", () => {
     console.log("Gateway is running");
 })
