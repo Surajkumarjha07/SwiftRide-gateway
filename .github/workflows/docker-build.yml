@@ -27,15 +27,6 @@ jobs:
              
             - name: build docker image
               uses: docker/setup-buildx-action@v3
-
-            - name: Verify built image
-              run: |
-                docker run --rm --entrypoint sh surajkumarjha007/swiftride-gateway:latest -c "
-                pwd
-                ls -la
-                ls dist
-                head -20 dist/index.js
-                "
             
             - name: push docker image to docker hub
               uses: docker/build-push-action@v6
